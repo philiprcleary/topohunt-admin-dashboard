@@ -112,7 +112,7 @@ export default function GeneralPointsPage() {
       <div className="general-points-layout">
         <section className="section-card general-points-map-card">
           <p className="muted general-points-hint">
-            Press and hold anywhere on the map to load standard points in that hexagon and its
+            Right-click and hold anywhere on the map to load standard points in that hexagon and its
             neighbours.
             {loading && ' Loading…'}
           </p>
@@ -122,11 +122,12 @@ export default function GeneralPointsPage() {
             expandable={false}
             alwaysShowMap
             mapInteraction="hold"
+            holdMouseButton="right"
             onMapClick={(lat, lon) => void handleMapClick(lat, lon)}
             defaultCenter={[54.5, -2.5]}
             defaultZoom={6}
             fitBoundsToPoints={filteredPois.length > 0}
-            emptyMessage="Press and hold the map to load points"
+            emptyMessage="Right-click and hold the map to load points"
           />
         </section>
 

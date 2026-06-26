@@ -80,6 +80,7 @@ interface MapInteractionHandlerProps {
   onMapClick?: (lat: number, lon: number) => void;
   mode: 'click' | 'hold';
   holdDurationMs: number;
+  holdMouseButton: 'left' | 'right';
   onHoldProgress: (state: HoldProgressState | null) => void;
 }
 
@@ -87,8 +88,10 @@ function MapInteractionHandler({
   onMapClick,
   mode,
   holdDurationMs,
+  holdMouseButton,
   onHoldProgress,
 }: MapInteractionHandlerProps) {
+  const holdButton = holdMouseButton === 'right' ? 2 : 0;
   const map = useMap();
   const holdRef = useRef<{
     startX: number;
@@ -107,14 +110,18 @@ function MapInteractionHandler({
 
     cancelAnimationFrame(activeHold.rafId);
     holdRef.current = null;
-    map.dragging.enable();
+    if (holdMouseButton !== 'right') {
+      map.dragging.enable();
+    }
     onHoldProgress(null);
-  }, [map, onHoldProgress]);
+  }, [holdMouseButton, map, onHoldProgress]);
 
   const startHold = useCallback(
     (clientX: number, clientY: number, lat: number, lon: number) => {
       cancelHold();
-      map.dragging.disable();
+      if (holdMouseButton !== 'right') {
+        map.dragging.disable();
+      }
 
       const hold = {
         startX: clientX,
@@ -143,7 +150,9 @@ function MapInteractionHandler({
         if (progress >= 1) {
           const { lat: holdLat, lon: holdLon } = activeHold;
           holdRef.current = null;
-          map.dragging.enable();
+          if (holdMouseButton !== 'right') {
+            map.dragging.enable();
+          }
           onHoldProgress(null);
           onMapClick?.(holdLat, holdLon);
           return;
@@ -154,7 +163,7 @@ function MapInteractionHandler({
 
       hold.rafId = requestAnimationFrame(tick);
     },
-    [cancelHold, holdDurationMs, map, onHoldProgress, onMapClick],
+    [cancelHold, holdDurationMs, holdMouseButton, map, onHoldProgress, onMapClick],
   );
 
   const checkHoldMovement = useCallback(
@@ -191,10 +200,12 @@ function MapInteractionHandler({
       if (holdRef.current) {
         cancelAnimationFrame(holdRef.current.rafId);
         holdRef.current = null;
-        map.dragging.enable();
+        if (holdMouseButton !== 'right') {
+          map.dragging.enable();
+        }
       }
     };
-  }, [cancelHold, map]);
+  }, [cancelHold, holdMouseButton, map]);
 
   useMapEvents({
     click(event) {
@@ -208,7 +219,7 @@ function MapInteractionHandler({
       }
 
       const original = event.originalEvent;
-      if (original instanceof MouseEvent && original.button !== 0) {
+      if (original instanceof MouseEvent && original.button !== holdButton) {
         return;
       }
 
@@ -223,6 +234,23 @@ function MapInteractionHandler({
       checkHoldMovement(original.clientX, original.clientY);
     },
   });
+
+  useEffect(() => {
+    if (mode !== 'hold' || holdMouseButton !== 'right') {
+      return;
+    }
+
+    const container = map.getContainer();
+    const preventContextMenu = (event: Event) => {
+      event.preventDefault();
+    };
+
+    container.addEventListener('contextmenu', preventContextMenu);
+
+    return () => {
+      container.removeEventListener('contextmenu', preventContextMenu);
+    };
+  }, [holdMouseButton, map, mode]);
 
   useEffect(() => {
     if (mode !== 'hold') {
@@ -271,6 +299,7 @@ interface MapContentProps {
   onMapClick?: (lat: number, lon: number) => void;
   mapInteraction?: 'click' | 'hold';
   holdDurationMs?: number;
+  holdMouseButton?: 'left' | 'right';
   defaultCenter?: [number, number];
   defaultZoom?: number;
   fitBoundsToPoints?: boolean;
@@ -282,6 +311,7 @@ function MapContent({
   onMapClick,
   mapInteraction = 'click',
   holdDurationMs = DEFAULT_HOLD_DURATION_MS,
+  holdMouseButton = 'left',
   defaultCenter = [51.505, -0.09],
   defaultZoom = 6,
   fitBoundsToPoints = true,
@@ -319,6 +349,7 @@ function MapContent({
           <MapInteractionHandler
             mode={mapInteraction}
             holdDurationMs={holdDurationMs}
+            holdMouseButton={holdMouseButton}
             onMapClick={onMapClick}
             onHoldProgress={setHoldProgress}
           />
@@ -371,6 +402,7 @@ interface MapViewProps {
   onMapClick?: (lat: number, lon: number) => void;
   mapInteraction?: 'click' | 'hold';
   holdDurationMs?: number;
+  holdMouseButton?: 'left' | 'right';
   alwaysShowMap?: boolean;
   defaultCenter?: [number, number];
   defaultZoom?: number;
@@ -386,6 +418,7 @@ export default function MapView({
   onMapClick,
   mapInteraction = 'click',
   holdDurationMs = DEFAULT_HOLD_DURATION_MS,
+  holdMouseButton = 'left',
   alwaysShowMap = false,
   defaultCenter,
   defaultZoom,
@@ -410,6 +443,7 @@ export default function MapView({
           onMapClick={onMapClick}
           mapInteraction={mapInteraction}
           holdDurationMs={holdDurationMs}
+          holdMouseButton={holdMouseButton}
           defaultCenter={defaultCenter}
           defaultZoom={defaultZoom}
           fitBoundsToPoints={fitBoundsToPoints}

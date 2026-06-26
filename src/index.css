@@ -213,7 +213,7 @@ td {
 
 .poi-list-card {
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .poi-list-table th,
@@ -221,9 +221,21 @@ td {
   vertical-align: middle;
 }
 
+.poi-list-table tbody tr:hover {
+  position: relative;
+  z-index: 2;
+}
+
+.poi-list-thumb-col,
 .poi-list-thumb-cell {
   width: 72px;
-  padding-left: 16px;
+  padding-right: 16px;
+  overflow: visible;
+}
+
+.poi-list-thumb-preview {
+  position: relative;
+  display: inline-block;
 }
 
 .poi-list-thumb {
@@ -233,6 +245,31 @@ td {
   border-radius: 8px;
   object-fit: cover;
   border: 1px solid #e2e8f0;
+}
+
+.poi-list-thumb-hover {
+  position: absolute;
+  right: calc(100% + 10px);
+  left: auto;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 280px;
+  height: 280px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.18);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 30;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+}
+
+.poi-list-thumb-preview:hover .poi-list-thumb-hover {
+  opacity: 1;
+  visibility: visible;
 }
 
 .poi-list-thumb-placeholder {
@@ -253,6 +290,43 @@ td {
   text-align: center;
   color: #64748b;
   padding: 32px 16px !important;
+}
+
+.poi-list-map-col {
+  width: 88px;
+}
+
+.poi-list-map-cell {
+  width: 88px;
+  text-align: center;
+  padding-right: 16px;
+}
+
+.poi-location-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.map-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: #fff;
+  color: #2563eb;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+.map-icon-btn:hover {
+  background: #eff6ff;
+  border-color: #2563eb;
 }
 
 .pagination {
@@ -850,20 +924,6 @@ td {
   gap: 8px;
 }
 
-.view-map-btn {
-  background: #fff;
-  color: #2563eb;
-  border: 1px solid #2563eb;
-  border-radius: 8px;
-  padding: 10px 14px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.view-map-btn:hover {
-  background: #eff6ff;
-}
-
 .approve-btn {
   white-space: nowrap;
 }
@@ -891,7 +951,7 @@ td {
   top: 0;
   right: 0;
   bottom: 0;
-  left: var(--app-sidebar-width);
+  left: 400px;
   background: #fff;
   z-index: 1001;
   display: flex;
@@ -963,7 +1023,6 @@ td {
     flex-direction: row;
   }
 
-  .approval-list-actions .view-map-btn,
   .approval-list-actions .approve-btn {
     flex: 1;
   }

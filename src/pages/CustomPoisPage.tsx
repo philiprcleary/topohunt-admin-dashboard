@@ -3,11 +3,113 @@ import MapView from '../components/MapView';
 import MapSidebar from '../components/MapSidebar';
 import { useAuth } from '../auth/AuthContext';
 import { formatDateTime } from '../utils/formatDate';
+import { googleStreetViewUrl } from '../utils/googleMaps';
 import type { CustomPoi, PendingCustomPoi } from '../types';
 
 type Tab = 'map' | 'list' | 'approval';
 
+type MapSidebarPoi = Pick<CustomPoi, 'id' | 'lat' | 'lon' | 'imageUrl'> & {
+  approved?: boolean;
+};
+
 const PAGE_SIZE = 10;
+
+function MapPinIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" />
+      <circle cx="12" cy="10" r="3" />
+    </svg>
+  );
+}
+
+function StreetViewIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="5" r="2" />
+      <path d="M12 7v2" />
+      <path d="M7 20l2-7h6l2 7" />
+      <path d="M9 11l3-2 3 2" />
+    </svg>
+  );
+}
+
+function PoiListThumb({ imageUrl, poiId }: { imageUrl: string; poiId: number }) {
+  return (
+    <div className="poi-list-thumb-preview">
+      <a href={imageUrl} target="_blank" rel="noreferrer">
+        <img
+          src={imageUrl}
+          alt={`Custom POI #${poiId}`}
+          className="poi-list-thumb"
+          loading="lazy"
+        />
+      </a>
+      <img
+        src={imageUrl}
+        alt=""
+        aria-hidden="true"
+        className="poi-list-thumb-hover"
+      />
+    </div>
+  );
+}
+
+function PoiLocationActions({
+  poiId,
+  lat,
+  lon,
+  onViewMap,
+}: {
+  poiId: number;
+  lat: number;
+  lon: number;
+  onViewMap: () => void;
+}) {
+  return (
+    <div className="poi-location-actions">
+      <button
+        type="button"
+        className="map-icon-btn"
+        aria-label={`View POI #${poiId} on map`}
+        title="View on map"
+        onClick={onViewMap}
+      >
+        <MapPinIcon />
+      </button>
+      <a
+        href={googleStreetViewUrl(lat, lon)}
+        target="_blank"
+        rel="noreferrer"
+        className="map-icon-btn"
+        aria-label={`Open Street View for POI #${poiId}`}
+        title="Open Street View"
+      >
+        <StreetViewIcon />
+      </a>
+    </div>
+  );
+}
 
 export default function CustomPoisPage() {
   const { api } = useAuth();
@@ -17,7 +119,7 @@ export default function CustomPoisPage() {
   const [listPage, setListPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [approvingId, setApprovingId] = useState<number | null>(null);
-  const [mapPoi, setMapPoi] = useState<PendingCustomPoi | null>(null);
+  const [mapPoi, setMapPoi] = useState<MapSidebarPoi | null>(null);
   const [mapSidebarOpen, setMapSidebarOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,6 +157,11 @@ export default function CustomPoisPage() {
     const start = (listPage - 1) * PAGE_SIZE;
     return customPois.slice(start, start + PAGE_SIZE);
   }, [customPois, listPage]);
+
+  const openMapSidebar = (poi: MapSidebarPoi) => {
+    setMapPoi(poi);
+    setMapSidebarOpen(true);
+  };
 
   const handleApprove = async (id: number) => {
     if (!api) {
@@ -134,38 +241,25 @@ export default function CustomPoisPage() {
           <table className="poi-list-table">
             <thead>
               <tr>
-                <th aria-hidden="true" />
                 <th>ID</th>
                 <th>User</th>
                 <th>Status</th>
                 <th>Discoveries</th>
                 <th>Created</th>
+                <th aria-label="Location" className="poi-list-map-col" />
+                <th aria-hidden="true" className="poi-list-thumb-col" />
               </tr>
             </thead>
             <tbody>
               {paginatedPois.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="poi-list-empty">
+                  <td colSpan={7} className="poi-list-empty">
                     No custom POIs found.
                   </td>
                 </tr>
               ) : (
                 paginatedPois.map((poi) => (
                   <tr key={poi.id}>
-                    <td className="poi-list-thumb-cell">
-                      {poi.imageUrl ? (
-                        <a href={poi.imageUrl} target="_blank" rel="noreferrer">
-                          <img
-                            src={poi.imageUrl}
-                            alt={`Custom POI #${poi.id}`}
-                            className="poi-list-thumb"
-                            loading="lazy"
-                          />
-                        </a>
-                      ) : (
-                        <div className="poi-list-thumb-placeholder">No image</div>
-                      )}
-                    </td>
                     <td>#{poi.id}</td>
                     <td>{poi.username ?? poi.email}</td>
                     <td>
@@ -175,6 +269,29 @@ export default function CustomPoisPage() {
                     </td>
                     <td>{poi.discoveryCount}</td>
                     <td>{formatDateTime(poi.createdAt)}</td>
+                    <td className="poi-list-map-cell">
+                      <PoiLocationActions
+                        poiId={poi.id}
+                        lat={poi.lat}
+                        lon={poi.lon}
+                        onViewMap={() =>
+                          openMapSidebar({
+                            id: poi.id,
+                            lat: poi.lat,
+                            lon: poi.lon,
+                            imageUrl: poi.imageUrl,
+                            approved: poi.approved,
+                          })
+                        }
+                      />
+                    </td>
+                    <td className="poi-list-thumb-cell">
+                      {poi.imageUrl ? (
+                        <PoiListThumb imageUrl={poi.imageUrl} poiId={poi.id} />
+                      ) : (
+                        <div className="poi-list-thumb-placeholder">No image</div>
+                      )}
+                    </td>
                   </tr>
                 ))
               )}
@@ -241,16 +358,12 @@ export default function CustomPoisPage() {
                   </p>
                 </div>
                 <div className="approval-list-actions">
-                  <button
-                    type="button"
-                    className="view-map-btn"
-                    onClick={() => {
-                      setMapPoi(poi);
-                      setMapSidebarOpen(true);
-                    }}
-                  >
-                    View on map
-                  </button>
+                  <PoiLocationActions
+                    poiId={poi.id}
+                    lat={poi.lat}
+                    lon={poi.lon}
+                    onViewMap={() => openMapSidebar(poi)}
+                  />
                   <button
                     type="button"
                     className="approve-btn"
@@ -292,7 +405,7 @@ export default function CustomPoisPage() {
                 id: mapPoi.id,
                 lat: mapPoi.lat,
                 lon: mapPoi.lon,
-                color: '#f59e0b',
+                color: mapPoi.approved ? '#16a34a' : '#f59e0b',
                 label: `Custom POI #${mapPoi.id}`,
                 imageUrl: mapPoi.imageUrl,
               },
