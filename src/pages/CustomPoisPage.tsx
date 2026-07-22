@@ -10,9 +10,49 @@ type Tab = 'map' | 'list' | 'approval';
 
 type MapSidebarPoi = Pick<CustomPoi, 'id' | 'lat' | 'lon' | 'imageUrl'> & {
   approved?: boolean;
+  isRejected?: boolean;
 };
 
 const PAGE_SIZE = 10;
+
+const REJECTION_REASONS = [
+  'Inappropriate or offensive content',
+  'Low quality or unclear photo',
+  'Not a valid hunting location',
+  'Duplicate of an existing spot',
+  'Unsafe or inaccessible location',
+  'Spam or fake submission',
+] as const;
+
+function poiStatusLabel(poi: Pick<CustomPoi, 'approved' | 'isRejected'>): string {
+  if (poi.isRejected) {
+    return 'Rejected';
+  }
+  if (poi.approved) {
+    return 'Approved';
+  }
+  return 'Pending';
+}
+
+function poiStatusClass(poi: Pick<CustomPoi, 'approved' | 'isRejected'>): string {
+  if (poi.isRejected) {
+    return 'badge rejected';
+  }
+  if (poi.approved) {
+    return 'badge approved';
+  }
+  return 'badge pending';
+}
+
+function poiMapColor(poi: Pick<CustomPoi, 'approved' | 'isRejected'>): string {
+  if (poi.isRejected) {
+    return '#dc2626';
+  }
+  if (poi.approved) {
+    return '#16a34a';
+  }
+  return '#f59e0b';
+}
 
 function MapPinIcon() {
   return (
@@ -119,6 +159,8 @@ export default function CustomPoisPage() {
   const [listPage, setListPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [approvingId, setApprovingId] = useState<number | null>(null);
+  const [rejectingId, setRejectingId] = useState<number | null>(null);
+  const [rejectReasons, setRejectReasons] = useState<Record<number, string>>({});
   const [mapPoi, setMapPoi] = useState<MapSidebarPoi | null>(null);
   const [mapSidebarOpen, setMapSidebarOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -163,6 +205,9 @@ export default function CustomPoisPage() {
     setMapSidebarOpen(true);
   };
 
+  const getRejectReason = (id: number) =>
+    rejectReasons[id] ?? REJECTION_REASONS[0];
+
   const handleApprove = async (id: number) => {
     if (!api) {
       return;
@@ -183,16 +228,42 @@ export default function CustomPoisPage() {
     }
   };
 
+  const handleReject = async (id: number) => {
+    if (!api) {
+      return;
+    }
+
+    const reason = getRejectReason(id);
+    setRejectingId(id);
+    setError(null);
+
+    try {
+      await api.rejectCustomPoi(id, reason);
+      await loadData();
+      setRejectReasons((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+      setMapPoi((current) => (current?.id === id ? null : current));
+      setMapSidebarOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reject POI');
+    } finally {
+      setRejectingId(null);
+    }
+  };
+
   const allMapPoints = useMemo(
     () =>
       customPois.map((poi) => ({
         id: poi.id,
         lat: poi.lat,
         lon: poi.lon,
-        color: poi.approved ? '#16a34a' : '#f59e0b',
-        label: `${poi.username ?? `User #${poi.userId}`} · #${poi.id} · ${
-          poi.approved ? 'approved' : 'pending'
-        }`,
+        color: poiMapColor(poi),
+        label: `${poi.username ?? `User #${poi.userId}`} · #${poi.id} · ${poiStatusLabel(
+          poi,
+        ).toLowerCase()}`,
         imageUrl: poi.imageUrl,
       })),
     [customPois],
@@ -263,9 +334,7 @@ export default function CustomPoisPage() {
                     <td>#{poi.id}</td>
                     <td>{poi.username ?? poi.email}</td>
                     <td>
-                      <span className={poi.approved ? 'badge approved' : 'badge pending'}>
-                        {poi.approved ? 'Approved' : 'Pending'}
-                      </span>
+                      <span className={poiStatusClass(poi)}>{poiStatusLabel(poi)}</span>
                     </td>
                     <td>{poi.discoveryCount}</td>
                     <td>{formatDateTime(poi.createdAt)}</td>
@@ -281,6 +350,7 @@ export default function CustomPoisPage() {
                             lon: poi.lon,
                             imageUrl: poi.imageUrl,
                             approved: poi.approved,
+                            isRejected: poi.isRejected,
                           })
                         }
                       />
@@ -327,54 +397,88 @@ export default function CustomPoisPage() {
           {pendingPois.length === 0 ? (
             <p className="muted">No custom POIs waiting for approval.</p>
           ) : (
-            pendingPois.map((poi) => (
-              <article key={poi.id} className="approval-list-item">
-                <div className="approval-list-image">
-                  {poi.imageUrl ? (
-                    <a href={poi.imageUrl} target="_blank" rel="noreferrer">
-                      <img
-                        src={poi.imageUrl}
-                        alt={`Custom POI #${poi.id}`}
-                        loading="lazy"
-                      />
-                    </a>
-                  ) : (
-                    <div className="approval-list-image-placeholder">No image</div>
-                  )}
-                </div>
-                <div className="approval-list-details">
-                  <div className="approval-list-header">
-                    <h3>Custom POI #{poi.id}</h3>
-                    <span className="badge pending">Pending</span>
+            pendingPois.map((poi) => {
+              const isBusy = approvingId === poi.id || rejectingId === poi.id;
+
+              return (
+                <article key={poi.id} className="approval-list-item">
+                  <div className="approval-list-image">
+                    {poi.imageUrl ? (
+                      <a href={poi.imageUrl} target="_blank" rel="noreferrer">
+                        <img
+                          src={poi.imageUrl}
+                          alt={`Custom POI #${poi.id}`}
+                          loading="lazy"
+                        />
+                      </a>
+                    ) : (
+                      <div className="approval-list-image-placeholder">No image</div>
+                    )}
                   </div>
-                  <p>
-                    <strong>User:</strong> {poi.username ?? poi.email}
-                  </p>
-                  <p>
-                    <strong>Location:</strong> {poi.lat.toFixed(5)}, {poi.lon.toFixed(5)}
-                  </p>
-                  <p>
-                    <strong>Submitted:</strong> {formatDateTime(poi.createdAt)}
-                  </p>
-                </div>
-                <div className="approval-list-actions">
-                  <PoiLocationActions
-                    poiId={poi.id}
-                    lat={poi.lat}
-                    lon={poi.lon}
-                    onViewMap={() => openMapSidebar(poi)}
-                  />
-                  <button
-                    type="button"
-                    className="approve-btn"
-                    onClick={() => void handleApprove(poi.id)}
-                    disabled={approvingId === poi.id}
-                  >
-                    {approvingId === poi.id ? 'Approving…' : 'Approve'}
-                  </button>
-                </div>
-              </article>
-            ))
+                  <div className="approval-list-details">
+                    <div className="approval-list-header">
+                      <h3>Custom POI #{poi.id}</h3>
+                      <span className="badge pending">Pending</span>
+                    </div>
+                    <p>
+                      <strong>User:</strong> {poi.username ?? poi.email}
+                    </p>
+                    <p>
+                      <strong>Location:</strong> {poi.lat.toFixed(5)}, {poi.lon.toFixed(5)}
+                    </p>
+                    <p>
+                      <strong>Submitted:</strong> {formatDateTime(poi.createdAt)}
+                    </p>
+                  </div>
+                  <div className="approval-list-actions">
+                    <div className="approval-list-action-row">
+                      <PoiLocationActions
+                        poiId={poi.id}
+                        lat={poi.lat}
+                        lon={poi.lon}
+                        onViewMap={() => openMapSidebar(poi)}
+                      />
+                      <button
+                        type="button"
+                        className="approve-btn"
+                        onClick={() => void handleApprove(poi.id)}
+                        disabled={isBusy}
+                      >
+                        {approvingId === poi.id ? 'Approving…' : 'Approve'}
+                      </button>
+                    </div>
+                    <div className="reject-controls">
+                      <select
+                        className="reject-reason-select"
+                        aria-label={`Rejection reason for POI #${poi.id}`}
+                        value={getRejectReason(poi.id)}
+                        onChange={(event) =>
+                          setRejectReasons((current) => ({
+                            ...current,
+                            [poi.id]: event.target.value,
+                          }))
+                        }
+                        disabled={isBusy}
+                      >
+                        {REJECTION_REASONS.map((reason) => (
+                          <option key={reason} value={reason}>
+                            {reason}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="reject-btn"
+                        onClick={() => void handleReject(poi.id)}
+                        disabled={isBusy}
+                      >
+                        {rejectingId === poi.id ? 'Rejecting…' : 'Reject'}
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              );
+            })
           )}
         </div>
       )}
@@ -405,7 +509,10 @@ export default function CustomPoisPage() {
                 id: mapPoi.id,
                 lat: mapPoi.lat,
                 lon: mapPoi.lon,
-                color: mapPoi.approved ? '#16a34a' : '#f59e0b',
+                color: poiMapColor({
+                  approved: Boolean(mapPoi.approved),
+                  isRejected: Boolean(mapPoi.isRejected),
+                }),
                 label: `Custom POI #${mapPoi.id}`,
                 imageUrl: mapPoi.imageUrl,
               },

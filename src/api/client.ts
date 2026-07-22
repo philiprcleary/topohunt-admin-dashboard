@@ -61,6 +61,15 @@ export function createAdminApi(token: string) {
         { method: 'POST' },
         token,
       ),
+    rejectCustomPoi: (id: number, reason: string) =>
+      request<{ id: number; isRejected: boolean; rejectionReason: string }>(
+        `/api/admin/custom-pois/${id}/reject`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ reason }),
+        },
+        token,
+      ),
     getNearbyPois: (lat: number, lon: number) =>
       request<import('../types').NearbyPoisResponse>(
         `/api/admin/pois/nearby?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`,

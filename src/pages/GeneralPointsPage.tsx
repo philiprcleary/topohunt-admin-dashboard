@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import MapView from '../components/MapView';
 import { useAuth } from '../auth/AuthContext';
-import type { StandardPoi, MapPoint } from '../types';
+import type { StandardPoi, MapPoint, MapPolygon } from '../types';
 import {
   POI_TYPE_LABELS,
   POI_TYPE_ORDER,
@@ -10,6 +10,10 @@ import {
   poiTypeColor,
   type PoiType,
 } from '../utils/poiTypeColors';
+import { groupByHuntHex, huntHexKey, latLonToAxialHex } from '../utils/hentHunHelper';
+
+const BASE_MARKER_RADIUS = 6;
+const HIGHLIGHTED_MARKER_RADIUS = 10;
 
 export default function GeneralPointsPage() {
   const { api } = useAuth();
@@ -19,6 +23,7 @@ export default function GeneralPointsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadedArea, setLoadedArea] = useState<string | null>(null);
+  const [highlightedHexId, setHighlightedHexId] = useState<string | null>(null);
 
   const toggleType = (type: PoiType) => {
     setEnabledTypes((prev) => {
@@ -40,6 +45,7 @@ export default function GeneralPointsPage() {
     setClickLocation({ lat, lon });
     setLoading(true);
     setError(null);
+    setHighlightedHexId(null);
 
     try {
       const data = await api.getNearbyPois(lat, lon);
@@ -83,14 +89,36 @@ export default function GeneralPointsPage() {
     [pois, enabledTypes],
   );
 
-  const mapPoints = useMemo((): MapPoint[] => {
-    const points: MapPoint[] = filteredPois.map((poi) => ({
-      id: poi.id,
-      lat: poi.lat,
-      lon: poi.lon,
-      color: poiTypeColor(poi.poiType),
-      label: poiDisplayLabel(poi.name, poi.inscription),
+  const hexGroups = useMemo(() => groupByHuntHex(filteredPois), [filteredPois]);
+
+  const mapPolygons = useMemo((): MapPolygon[] => {
+    return hexGroups.map(({ key, cell }) => ({
+      id: key,
+      // Hunt hex boundary is [lon, lat]; Leaflet wants [lat, lon].
+      positions: cell.boundary.map(([lon, lat]) => [lat, lon] as [number, number]),
+      color: '#334155',
+      fillColor: '#64748b',
+      fillOpacity: 0.06,
+      weight: 1.5,
     }));
+  }, [hexGroups]);
+
+  const mapPoints = useMemo((): MapPoint[] => {
+    const points: MapPoint[] = filteredPois.map((poi) => {
+      const { q, r } = latLonToAxialHex(poi.lat, poi.lon);
+      const hexId = huntHexKey(q, r);
+      const highlighted = highlightedHexId === hexId;
+
+      return {
+        id: poi.id,
+        lat: poi.lat,
+        lon: poi.lon,
+        color: poiTypeColor(poi.poiType),
+        label: poiDisplayLabel(poi.name, poi.inscription),
+        groupId: hexId,
+        radius: highlighted ? HIGHLIGHTED_MARKER_RADIUS : BASE_MARKER_RADIUS,
+      };
+    });
 
     if (clickLocation) {
       points.push({
@@ -103,7 +131,7 @@ export default function GeneralPointsPage() {
     }
 
     return points;
-  }, [filteredPois, clickLocation]);
+  }, [filteredPois, clickLocation, highlightedHexId]);
 
   return (
     <div className="page">
@@ -113,11 +141,14 @@ export default function GeneralPointsPage() {
         <section className="section-card general-points-map-card">
           <p className="muted general-points-hint">
             Right-click and hold anywhere on the map to load standard points in that hexagon and its
-            neighbours.
+            neighbours. Hover a hunt hex to highlight its points.
             {loading && ' Loading…'}
           </p>
           <MapView
             points={mapPoints}
+            polygons={mapPolygons}
+            highlightedPolygonId={highlightedHexId}
+            onPolygonHighlight={setHighlightedHexId}
             height="calc(100vh - 180px)"
             expandable={false}
             alwaysShowMap
@@ -139,7 +170,7 @@ export default function GeneralPointsPage() {
             <>
               {loadedArea && (
                 <p className="muted general-points-meta">
-                  {pois.length} points · H3 {loadedArea}
+                  {pois.length} points · {hexGroups.length} hunt hexes · H3 {loadedArea}
                 </p>
               )}
               <ul className="event-type-list">

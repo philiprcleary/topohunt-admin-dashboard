@@ -15,6 +15,20 @@ export interface MapPoint {
   label?: string;
   color?: string;
   imageUrl?: string | null;
+  /** CircleMarker radius in pixels; defaults to 6. */
+  radius?: number;
+  /** Shared highlight group (e.g. hunt hex id). */
+  groupId?: string;
+}
+
+export interface MapPolygon {
+  id: string;
+  /** Leaflet positions as [lat, lon] rings. */
+  positions: [number, number][];
+  color?: string;
+  fillColor?: string;
+  fillOpacity?: number;
+  weight?: number;
 }
 
 export interface ActivityPoint {
@@ -75,6 +89,8 @@ export interface UserActivity {
     lon: number;
     imageUrl: string | null;
     approved: boolean;
+    isRejected: boolean;
+    rejectionReason: string | null;
     approvalDate: string | null;
     createdAt: string;
     discoveryCount: number;
@@ -102,6 +118,8 @@ export interface CustomPoi {
   lon: number;
   imageUrl: string | null;
   approved: boolean;
+  isRejected: boolean;
+  rejectionReason: string | null;
   approvalDate: string | null;
   createdAt: string;
   discoveryCount: number;

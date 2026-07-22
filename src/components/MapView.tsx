@@ -1,9 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip, useMap, useMapEvents } from 'react-leaflet';
+import {
+  MapContainer,
+  TileLayer,
+  CircleMarker,
+  Polygon,
+  Popup,
+  Tooltip,
+  useMap,
+  useMapEvents,
+} from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import MapSidebar from './MapSidebar';
-import type { MapPoint } from '../types';
+import type { MapPoint, MapPolygon } from '../types';
+import { googleStreetViewUrl } from '../utils/googleMaps';
 
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
@@ -19,13 +29,25 @@ L.Icon.Default.mergeOptions({
 function FitBounds({ points, enabled }: { points: MapPoint[]; enabled: boolean }) {
   const map = useMap();
 
+  // Stable while only highlight/style props change (radius, color, etc.).
+  const boundsKey = useMemo(
+    () => points.map((point) => `${point.id}:${point.lat},${point.lon}`).join('|'),
+    [points],
+  );
+
+  const fitPositions = useMemo(
+    () => points.map((point) => [point.lat, point.lon] as [number, number]),
+    // Recompute only when positions change; `points` is read from the latest render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [boundsKey],
+  );
+
   useEffect(() => {
-    if (!enabled || points.length === 0) {
+    if (!enabled || fitPositions.length === 0) {
       return;
     }
-    const bounds = L.latLngBounds(points.map((point) => [point.lat, point.lon]));
-    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
-  }, [map, points, enabled]);
+    map.fitBounds(L.latLngBounds(fitPositions), { padding: [40, 40], maxZoom: 14 });
+  }, [map, fitPositions, enabled]);
 
   return null;
 }
@@ -293,8 +315,14 @@ function MapInteractionHandler({
   return null;
 }
 
+const DEFAULT_MARKER_RADIUS = 6;
+const HIGHLIGHT_CLEAR_DELAY_MS = 40;
+
 interface MapContentProps {
   points: MapPoint[];
+  polygons?: MapPolygon[];
+  highlightedPolygonId?: string | null;
+  onPolygonHighlight?: (id: string | null) => void;
   interactive: boolean;
   onMapClick?: (lat: number, lon: number) => void;
   mapInteraction?: 'click' | 'hold';
@@ -307,6 +335,9 @@ interface MapContentProps {
 
 function MapContent({
   points,
+  polygons = [],
+  highlightedPolygonId = null,
+  onPolygonHighlight,
   interactive,
   onMapClick,
   mapInteraction = 'click',
@@ -317,6 +348,7 @@ function MapContent({
   fitBoundsToPoints = true,
 }: MapContentProps) {
   const [holdProgress, setHoldProgress] = useState<HoldProgressState | null>(null);
+  const clearHighlightTimerRef = useRef<number | null>(null);
 
   const center = useMemo<[number, number]>(() => {
     if (points.length === 0) {
@@ -326,6 +358,38 @@ function MapContent({
     const avgLon = points.reduce((sum, point) => sum + point.lon, 0) / points.length;
     return [avgLat, avgLon];
   }, [points, defaultCenter]);
+
+  const setHighlight = useCallback(
+    (id: string | null) => {
+      if (!onPolygonHighlight) {
+        return;
+      }
+
+      if (clearHighlightTimerRef.current != null) {
+        window.clearTimeout(clearHighlightTimerRef.current);
+        clearHighlightTimerRef.current = null;
+      }
+
+      if (id == null) {
+        clearHighlightTimerRef.current = window.setTimeout(() => {
+          clearHighlightTimerRef.current = null;
+          onPolygonHighlight(null);
+        }, HIGHLIGHT_CLEAR_DELAY_MS);
+        return;
+      }
+
+      onPolygonHighlight(id);
+    },
+    [onPolygonHighlight],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (clearHighlightTimerRef.current != null) {
+        window.clearTimeout(clearHighlightTimerRef.current);
+      }
+    };
+  }, []);
 
   return (
     <>
@@ -355,16 +419,52 @@ function MapContent({
           />
         )}
         <FitBounds points={points} enabled={fitBoundsToPoints} />
+        {polygons.map((polygon) => {
+          const highlighted = polygon.id === highlightedPolygonId;
+          const color = polygon.color ?? '#0f172a';
+          return (
+            <Polygon
+              key={polygon.id}
+              positions={polygon.positions}
+              pathOptions={{
+                color,
+                weight: highlighted ? (polygon.weight ?? 2) + 1.5 : (polygon.weight ?? 2),
+                fillColor: polygon.fillColor ?? color,
+                fillOpacity: highlighted
+                  ? Math.min((polygon.fillOpacity ?? 0.08) + 0.12, 0.35)
+                  : (polygon.fillOpacity ?? 0.08),
+                opacity: highlighted ? 0.95 : 0.7,
+              }}
+              eventHandlers={
+                onPolygonHighlight
+                  ? {
+                      mouseover: () => setHighlight(polygon.id),
+                      mouseout: () => setHighlight(null),
+                    }
+                  : undefined
+              }
+            />
+          );
+        })}
         {points.map((point) => (
           <CircleMarker
             key={point.id}
             center={[point.lat, point.lon]}
-            radius={6}
+            radius={point.radius ?? DEFAULT_MARKER_RADIUS}
             pathOptions={{
               color: point.color ?? '#2563eb',
               fillColor: point.color ?? '#2563eb',
               fillOpacity: 0.8,
+              weight: point.radius && point.radius > DEFAULT_MARKER_RADIUS ? 2 : 1,
             }}
+            eventHandlers={
+              onPolygonHighlight && point.groupId
+                ? {
+                    mouseover: () => setHighlight(point.groupId!),
+                    mouseout: () => setHighlight(null),
+                  }
+                : undefined
+            }
           >
             {point.label && (
               <Tooltip direction="top" offset={[0, -8]} opacity={0.95}>
@@ -382,6 +482,14 @@ function MapContent({
                       className="map-popup-image"
                     />
                   )}
+                  <a
+                    className="map-popup-street-view"
+                    href={googleStreetViewUrl(point.lat, point.lon)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open in Street View
+                  </a>
                 </div>
               </Popup>
             )}
@@ -395,6 +503,9 @@ function MapContent({
 
 interface MapViewProps {
   points: MapPoint[];
+  polygons?: MapPolygon[];
+  highlightedPolygonId?: string | null;
+  onPolygonHighlight?: (id: string | null) => void;
   height?: string;
   emptyMessage?: string;
   expandable?: boolean;
@@ -411,6 +522,9 @@ interface MapViewProps {
 
 export default function MapView({
   points,
+  polygons,
+  highlightedPolygonId,
+  onPolygonHighlight,
   height = '400px',
   emptyMessage = 'No points to display',
   expandable = true,
@@ -439,6 +553,9 @@ export default function MapView({
       <div className="map-container" style={{ height }}>
         <MapContent
           points={points}
+          polygons={polygons}
+          highlightedPolygonId={highlightedPolygonId}
+          onPolygonHighlight={onPolygonHighlight}
           interactive
           onMapClick={onMapClick}
           mapInteraction={mapInteraction}
@@ -455,7 +572,7 @@ export default function MapView({
   return (
     <>
       <div className="map-container map-container-preview" style={{ height }}>
-        <MapContent points={points} interactive={false} />
+        <MapContent points={points} polygons={polygons} interactive={false} />
         <div className="map-preview-overlay" aria-hidden="true">
           <span className="map-preview-icon">
             <svg
@@ -485,7 +602,14 @@ export default function MapView({
 
       <MapSidebar isOpen={expanded} onClose={() => setExpanded(false)} title={title}>
         <div className="map-container" style={{ height: '100%' }}>
-          <MapContent key="expanded-map" points={points} interactive />
+          <MapContent
+            key="expanded-map"
+            points={points}
+            polygons={polygons}
+            highlightedPolygonId={highlightedPolygonId}
+            onPolygonHighlight={onPolygonHighlight}
+            interactive
+          />
         </div>
       </MapSidebar>
     </>

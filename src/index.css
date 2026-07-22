@@ -155,7 +155,8 @@ input {
 
 .login-card button,
 .date-filters button,
-.approve-btn {
+.approve-btn,
+.reject-btn {
   background: #2563eb;
   color: #fff;
   border: none;
@@ -164,9 +165,14 @@ input {
   cursor: pointer;
 }
 
+.reject-btn {
+  background: #dc2626;
+}
+
 .login-card button:disabled,
 .date-filters button:disabled,
-.approve-btn:disabled {
+.approve-btn:disabled,
+.reject-btn:disabled {
   opacity: 0.7;
   cursor: not-allowed;
 }
@@ -556,6 +562,24 @@ td {
   object-fit: cover;
 }
 
+.map-popup-street-view {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.map-popup-street-view:hover {
+  background: #1e293b;
+}
+
 .map-legend {
   display: flex;
   flex-wrap: wrap;
@@ -841,6 +865,11 @@ td {
   color: #92400e;
 }
 
+.badge.rejected {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
 .approval-list {
   display: flex;
   flex-direction: column;
@@ -920,12 +949,43 @@ td {
 .approval-list-actions {
   flex-shrink: 0;
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
+  align-items: flex-end;
   gap: 8px;
 }
 
-.approve-btn {
+.approval-list-action-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.approve-btn,
+.reject-btn {
   white-space: nowrap;
+}
+
+.reject-controls {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.reject-reason-select {
+  max-width: 220px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 0.9rem;
+}
+
+.reject-reason-select:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 .map-sidebar-backdrop {
@@ -1020,11 +1080,22 @@ td {
 
   .approval-list-actions {
     width: 100%;
-    flex-direction: row;
+    align-items: stretch;
   }
 
-  .approval-list-actions .approve-btn {
+  .approval-list-action-row,
+  .reject-controls {
+    width: 100%;
+  }
+
+  .approval-list-actions .approve-btn,
+  .approval-list-actions .reject-btn {
     flex: 1;
+  }
+
+  .reject-reason-select {
+    flex: 1;
+    max-width: none;
   }
 }
 
