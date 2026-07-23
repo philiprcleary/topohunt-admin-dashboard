@@ -1,7 +1,7 @@
 import { calculateDistance } from "./distanceHelper";
 
 /** Mercator lattice scale (centre → corner in projected metres). */
-export const HUNT_HEX_SIZE = 500;
+export const HUNT_HEX_SIZE = 400;
 
 export const HUNT_HEX_CIRCUMRADIUS_METERS = HUNT_HEX_SIZE;
 export const HUNT_HEX_EDGE_LENGTH_METERS = HUNT_HEX_SIZE;
