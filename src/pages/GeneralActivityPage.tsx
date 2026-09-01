@@ -185,6 +185,8 @@ export default function GeneralActivityPage() {
         data={activity}
         series={chartSeries}
         title="Activity over time"
+        startDate={dateRange.startDate}
+        endDate={dateRange.endDate}
       />
 
       <section className="section-card">
